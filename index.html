@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>移動停車場</title>
+
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#50657d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="移動停車場">
+  <link rel="apple-touch-icon" href="parking-icon-180.png">
+  <link rel="icon" href="parking-icon-192.png">
+
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body { margin: 0; min-height: 100%; overflow-x: hidden; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "PingFang TC", "Microsoft JhengHei", sans-serif;
+      background: repeating-linear-gradient(90deg, #cfd8e3 0 60px, #dde4ec 60px 110px, #c3cedb 110px 130px, #dde4ec 130px 180px);
+      user-select: none; -webkit-user-select: none; color: #34414f;
+      padding: calc(env(safe-area-inset-top) + 16px) 16px calc(env(safe-area-inset-bottom) + 16px);
+    }
+    button { font-family: inherit; cursor: pointer; }
+    .screen { display: none; flex-direction: column; align-items: center; gap: 14px; min-height: calc(100vh - 32px); padding-top: 70px; position: relative; }
+    .screen.active { display: flex; }
+
+    .round-btn {
+      position: absolute; top: 0; left: 0; z-index: 5;
+      width: 64px; height: 64px; border-radius: 50%; border: 4px solid #fff;
+      background: #f06a1f; color: #fff; font-size: 30px; text-decoration: none;
+      box-shadow: 0 3px 6px rgba(0,0,0,.25); display: flex; align-items: center; justify-content: center; padding: 0;
+    }
+    h1 { margin: 0 0 6px; font-size: clamp(34px, 6vw, 50px); color: #fff; text-shadow: 0 3px 0 #50657d, 0 6px 10px rgba(0,0,0,.2); }
+    .big-btn {
+      width: min(440px, 90vw); padding: 14px; font-size: 28px; font-weight: bold;
+      border: 5px solid #f06a1f; border-radius: 20px; background: #fdf6c3; color: #e0561a; box-shadow: 0 4px 0 #c84f15;
+    }
+    .big-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #c84f15; }
+    .big-btn small { display: block; font-size: 17px; color: #8a6d3b; font-weight: normal; }
+    .rules { width: min(600px, 92vw); background: #fffdf2; border-radius: 18px; padding: 12px 18px; font-size: 20px; line-height: 1.6; box-shadow: 0 3px 8px rgba(0,0,0,.12); }
+    .rules b { color: #d32f2f; }
+
+    /* 關卡表 */
+    .tiers { display: grid; gap: 12px; width: min(760px, 94vw); }
+    .tier { display: flex; align-items: center; gap: 10px; background: #fffdf2; border-radius: 18px; padding: 10px 12px; box-shadow: 0 3px 8px rgba(0,0,0,.1); }
+    .tier .tn { width: 92px; flex: none; text-align: center; font-size: 24px; font-weight: bold; color: #34414f; line-height: 1.15; }
+    .tier .tn small { display: block; font-size: 14px; font-weight: normal; color: #6b7785; }
+    .tier .lvs { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+    .lv-btn { position: relative; min-height: 70px; font-size: 19px; font-weight: bold; border-radius: 14px; border: 4px solid #f06a1f; background: #fdf6c3; color: #e0561a; box-shadow: 0 3px 0 #c84f15; padding: 4px 2px; line-height: 1.2; }
+    .lv-btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #c84f15; }
+    .lv-btn small { display: block; font-size: 13px; font-weight: normal; color: #8a6d3b; }
+    .lv-btn .got { display: block; font-size: 13px; color: #2e7d32; min-height: 1.1em; }
+    .lv-btn.done { background: #e2f5dc; border-color: #4f9a45; color: #2f5e28; box-shadow: 0 3px 0 #3b7a33; }
+    .lv-btn.next { background: #fff0a8; box-shadow: 0 3px 0 #c84f15, 0 0 0 4px #ffd24d; }
+    .lv-btn.next::after { content: '👉'; position: absolute; top: -14px; right: -8px; font-size: 22px; }
+
+    /* 遊戲 */
+    .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: center; font-size: 21px; font-weight: bold; }
+    .top .level { background: #fff; border-radius: 999px; padding: 4px 14px; }
+    .top .moves { background: #34414f; color: #fff; border-radius: 999px; padding: 4px 14px; }
+    .msg { min-height: 1.5em; font-size: clamp(21px, 3.4vw, 28px); font-weight: bold; text-align: center; color: #34414f; }
+    .lot { position: relative; width: min(84vw, 56vh, 540px); aspect-ratio: 1; margin-right: min(8vw, 50px); }
+    .board {
+      --n: 6; position: absolute; inset: 0; border-radius: 14px; border: 8px solid #5b6b7d; touch-action: none;
+      background-color: #8d9aa8;
+      background-image: linear-gradient(rgba(255,255,255,.18) 2px, transparent 2px), linear-gradient(90deg, rgba(255,255,255,.18) 2px, transparent 2px);
+      background-size: calc(100% / var(--n)) calc(100% / var(--n));
+    }
+    .exit { position: absolute; right: -8px; width: 12px; background: #8d9aa8; }
+    .exit-label { position: absolute; left: calc(100% + 8px); display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-size: 17px; font-weight: bold; color: #d32f2f; white-space: nowrap; line-height: 1.1; }
+    .exit-label b { font-size: 30px; animation: nudge 1.2s infinite; }
+    .car { position: absolute; padding: 7px; touch-action: none; cursor: grab; z-index: 1; }
+    .car.drag { z-index: 2; }
+    /* 車子零件：車輪、前擋風玻璃、後車窗、車頭燈、車尾燈（位置由 carParts() 依車頭方向算） */
+    .car .part { position: absolute; }
+    .car .wheel { z-index: -1; border-radius: 30%; background: radial-gradient(circle, #9e9e9e 0 22%, #2b2b2b 26%); }
+    .car .glass { background: rgba(200,230,255,.92); border-radius: 22%; box-shadow: inset 0 0 0 2px rgba(0,0,0,.12); }
+    .car .glass.front { background: linear-gradient(135deg, #e3f4ff, #a9d6f5); }
+    .car .head { background: #fff59d; border-radius: 40%; box-shadow: 0 0 6px 2px rgba(255,241,118,.8); }
+    .car .tail { background: #ff1744; border-radius: 30%; }
+    .car .body.red .tail { background: #7f0000; }
+    .car.anim { transition: left .18s, top .18s; }
+    .car.leave { transition: left .6s ease-in; }
+    .car .body { width: 100%; height: 100%; border-radius: 12px; position: relative; box-shadow: inset 0 -5px 0 rgba(0,0,0,.2), 0 3px 5px rgba(0,0,0,.25);
+      display: flex; align-items: center; justify-content: center; font-size: calc(min(84vw, 56vh, 540px) / var(--n) * .42); }
+    /* 車窗 */
+    .car.drag .body { box-shadow: 0 0 0 4px #fff, 0 6px 12px rgba(0,0,0,.35); }
+    .car.hint .body { animation: glow .8s infinite alternate; }
+    .car .arrow { position: relative; z-index: 1; line-height: 1; filter: drop-shadow(0 2px 2px rgba(0,0,0,.35)); }
+    .car .body.white { box-shadow: inset 0 0 0 3px #9aa5b1, inset 0 -5px 0 rgba(0,0,0,.15), 0 3px 5px rgba(0,0,0,.25); }
+
+    .tools { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+    .tools button { font-size: 20px; font-weight: bold; padding: 10px 16px; border-radius: 14px; border: 3px solid #f06a1f; background: #fdf6c3; color: #e0561a; box-shadow: 0 3px 0 #c84f15; }
+    .tools button:active { transform: translateY(2px); box-shadow: 0 1px 0 #c84f15; }
+
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: none; align-items: center; justify-content: center; z-index: 20; padding: 16px; }
+    .overlay.show { display: flex; }
+    .overlay .card { background: #fdf8dc; border: 6px solid #f06a1f; border-radius: 24px; padding: 26px 30px; text-align: center; max-width: 480px; }
+    .overlay h2 { color: #e0561a; font-size: 40px; margin: 0; }
+    .overlay .big-stars { font-size: 58px; margin: 8px 0; }
+    .overlay p { font-size: 21px; margin: 6px 0 16px; line-height: 1.5; }
+    .overlay .big-btn { width: 100%; margin-top: 10px; font-size: 25px; }
+
+    @keyframes nudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(6px); } }
+    @keyframes glow { from { box-shadow: 0 0 0 3px #fff, 0 0 12px 4px #ffeb3b; } to { box-shadow: 0 0 0 6px #ffeb3b, 0 0 22px 8px #ffeb3b; } }
+    @media (max-width: 600px) { .tier { flex-direction: column; } .tier .tn { width: auto; } .tier .lvs { width: 100%; } }
+  </style>
+</head>
+<body>
+
+<!-- ============ 選單 ============ -->
+<div class="screen active" id="menu">
+  <a href="https://alphones66.github.io/clock-practice/" class="round-btn" aria-label="回時鐘練習">🏠</a>
+  <h1>🚗 移動停車場</h1>
+  <div class="rules">
+    把擋路的車子<b>前後滑開</b>，讓 <b>⭐紅車</b> 從右邊的<b>出口</b>開出去！<br>
+    <small>橫的車只能左右滑，直的車只能上下滑。從入門開始，一關一關往上。做完的關卡會換新題目，不會重複。</small>
+  </div>
+  <div class="tiers" id="tiers"></div>
+  <button class="big-btn" id="resume" hidden>▶ 繼續上次的關卡<small></small></button>
+</div>
+
+<!-- ============ 遊戲 ============ -->
+<div class="screen" id="game">
+  <button class="round-btn" data-act="menu" aria-label="回關卡表">↩</button>
+  <div class="top"><span class="level" id="level"></span><span class="moves" id="moves"></span></div>
+  <div class="msg" id="msg"></div>
+  <div class="lot"><div class="board" id="board"></div></div>
+  <div class="tools">
+    <button data-act="undo">↶ 退一步</button>
+    <button data-act="hint">💡 提示</button>
+    <button data-act="reset">🔁 重來</button>
+  </div>
+</div>
+
+<div class="overlay" id="win">
+  <div class="card">
+    <h2>開出去了！</h2>
+    <div class="big-stars" id="win-stars"></div>
+    <p id="win-text"></p>
+    <button class="big-btn" id="next-lv" data-act="next">▶ 下一關</button>
+    <button class="big-btn" data-act="reset">🆕 這關換一題</button>
+    <button class="big-btn" data-act="menu">回關卡表</button>
+  </div>
+</div>
+
+<script>
+// ---------- 關卡 ----------
+// 每一關有一批題目（題庫），完成一題，下次就換下一題，不會重複
+// 每題是 [盤面, 最少步數]；盤面由左到右、由上到下，「.」是空位，同一個字母是同一台車，A 是紅車
+// 最少步數是電腦算出來的（一步 = 把一台車滑動一次，滑幾格都算一步）
+const TIERS = [
+  { name: "入門", n: 4, levels: [
+    [["....CAA.CD.B.D.B", 1], ["....AA..CD.BCD.B", 1], [".....AA....B...B", 1], [".DD.CAA.CBB.....", 1], ["DD...AA.CBB.C...", 1], [".....AA..B...BCC", 1], [".....AA...CB..CB", 1], ["..BBAA..........", 1], ["BB..AA..........", 1], [".....AA...BB....", 1], [".....AA.BB......", 1], ["DD...AA....BCC.B", 1], ["DD..AA.....BCC.B", 1], ["BCC.BAA.........", 1], ["..CCBAA.B.......", 1], ["..BBAA...CD..CD.", 1], [".BB..AA..CD..CD.", 1], ["....AA...BB.....", 1], ["B...BAA.D.C.D.C.", 1], ["....AA..CC.DBB.D", 1], [".....AA..CCDBB.D", 1], ["....AA.......BB.", 1], [".....AA.......BB", 1], ["B...BAA.....CC..", 1], ["....BAA.B....CC.", 1], ["..BB.AA...C...C.", 1], [".BB..AA...C...C.", 1], ["..CCAA...BB.DD..", 1], ["CC...AA.BB....DD", 1], ["....BAA.BC...C..", 1], [".....AA.BC..BC..", 1], [".BB..AA....C...C", 1], ["BB...AA....C...C", 1], ["..CCAA..BB......", 1], [".CC.AA..BB......", 1], [".CC.AA...BB.....", 1], [".CC..AA..BB.....", 1], ["....AA...C.B.C.B", 1], ["CC..AA..D..BD..B", 1], ["..CCDAA.D..B...B", 1]],
+    [["C...CAA..D.B.D.B", 1], [".....AA.CD.BCD.B", 1], ["....AA.....B...B", 1], ["..DDCAA.CBB.....", 1], [".DD.CAA.C.BB....", 1], ["....AA...B...BCC", 1], ["....AA....CB..CB", 1], [".BB.AA..........", 1], ["..BB.AA.........", 1], ["....AA....BB....", 1], ["....AA..BB......", 1], ["DD...AA....B.CCB", 1], [".DD.AA.....B.CCB", 1], ["B.CCBAA.........", 1], ["..CC.AA.B...B...", 1], ["BB...AA..CD..CD.", 1], [".BB.AA...CD..CD.", 1], [".....AA..BB.....", 1], ["....AA..CC.D.BBD", 1], ["....AA...CCD.BBD", 1], ["....AA........BB", 1], [".....AA.....BB..", 1], ["....AA..B...BCC.", 1], [".....AA.B...B.CC", 1], ["..BBAA....C...C.", 1], [".BB.AA....C...C.", 1], [".CC.AA..BB....DD", 1], [".CC..AA...BB..DD", 1], ["....AA..BC..BC..", 1], ["B...BAA..C...C..", 1], ["BB..AA.....C...C", 1], ["..BBAA.....C...C", 1], ["CC..AA..BB......", 1], [".CC.AA....BB....", 1], ["CC..AA....BB....", 1], ["CC...AA.BB......", 1], [".....AA..C.B.C.B", 1], [".CC..AA.D..BD..B", 1], ["..CCAA..D..BD..B", 1], [".BB..AA.CC...DD.", 1]],
+    [["...BCAABCD...D..", 2], [".....AABCD.BCD..", 2], ["....AA.B...B....", 2], ["...B.AAB........", 2], [".....AAB..CB..C.", 2], ["..C.AAC....B...B", 2], [".DDB.AAB....CC..", 2], [".DD..AAB...B.CC.", 2], ["BB..AAD..CD..C..", 2], ["..BBAAD..CD..C..", 2], [".....AAD.CCDBB..", 2], ["...DAA.D.CC..BB.", 2], ["BBC.AAC.........", 2], ["..BBAAC...C.....", 2], ["..BBAA.C...C....", 2], ["BB.C.AAC........", 2], ["...BAA.B.C...C..", 2], ["...B.AAB.C...C..", 2], ["CC...AABD..BD...", 2], ["CC..DAABD..B....", 2], ["....AA.B.CCB.DD.", 2], ["...B.AABCC..DD..", 2], ["....AAB...BCDD.C", 2], ["...CAA.C..B.DDB.", 2], ["...CAA.C.....BB.", 2], ["...C.AAC.....BB.", 2], ["....AA.BD..BDCC.", 2], ["D..BDAAB....CC..", 2], ["....AA.CDD.C.BB.", 2], ["....AA.C.DDCBB..", 2], ["..B.AAB.........", 2], ["...B.AAB....CC..", 2], [".....AAB...B.CC.", 2], ["DD..AAC.BBC.....", 2], ["DDC.AAC.BB......", 2], [".DD.AAC.B.C.B...", 2], ["..DDAAC.B.C.B...", 2], [".DD..AAC.B.C.B..", 2], ["DD.CAA.C.B...B..", 2], ["CC.DAA.D....BB..", 2]],
+    [["....AA.BCD.BCD..", 2], ["...B.AABCD..CD..", 2], [".....AAB...B....", 2], ["...BAA.B........", 2], ["...BAA.B..C...C.", 2], ["...B.AAB..C...C.", 2], [".DDB.AAB.....CC.", 2], ["DD..AA.B...B.CC.", 2], ["BBD.AAD..C...C..", 2], [".BB.AAD..CD..C..", 2], [".....AADCC.D.BB.", 2], ["....AA.D.CCDBB..", 2], [".BB.AAC...C.....", 2], ["BB..AAC...C.....", 2], [".BB.AA.C...C....", 2], [".BBCAA.C........", 2], [".....AAB.C.B.C..", 2], ["....AA.B.C.B.C..", 2], ["CC..AA.BD..BD...", 2], ["..CCAA.BD..BD...", 2], [".....AABCC.B.DD.", 2], ["...BAA.B.CC..DD.", 2], [".....AAC..BCDDB.", 2], ["..B.AAB....CDD.C", 2], ["....AA.C...CBB..", 2], [".....AAC...C.BB.", 2], ["...BDAABD...CC..", 2], ["D..BDAAB.....CC.", 2], [".....AAC.DDCBB..", 2], ["...C.AACDD..BB..", 2], ["....AAB...B.....", 2], ["...BAA.B....CC..", 2], ["...BAA.B.....CC.", 2], [".DD.AAC.BBC.....", 2], ["..DDAAC.BBC.....", 2], ["DD..AAC.B.C.B...", 2], ["DDC.AAC.B...B...", 2], [".DD.AA.C.B.C.B..", 2], [".DDC.AAC.B...B..", 2], [".CCDAA.D.....BB.", 2]],
+    [["..CBAACB........", 3], ["..C.AACB...B....", 3], ["DD.BAA.B......CC", 3], ["DD.B.AAB......CC", 3], ["...DAA.D.CC...BB", 3], [".....AADCC.D..BB", 3], ["...BAA.B.CC...DD", 3], ["...B.AABCC....DD", 3], ["..B.AABC...CDD..", 3], ["....AABC..BCDD..", 3], ["....AA.C...C..BB", 3], ["...C.AAC......BB", 3], ["D...DAAB...B..CC", 3], ["....AA.BD..BD.CC", 3], [".....AACDD.C..BB", 3], ["...CAA.C..DD.BB.", 3], ["...BAA.B......CC", 3], ["....AA.B...B..CC", 3], ["DDC.AAC..BB.....", 3], ["DDC.AAC...BB....", 3], ["CC.DAA.D......BB", 3], ["..CCAA.D...D..BB", 3], ["...B.AAB..CC....", 3], ["...BAA.B..CC....", 3], ["...CAABC..B.....", 3], ["..B.AABC...C....", 3], [".BBCAA.C..DD....", 3], ["BB.CAA.C..DD....", 3], ["CCDBAADB........", 3], [".CCBAADB..D.....", 3], [".....AAC...C..BB", 3], ["...CAA.C......BB", 3], ["....AAB...B...CC", 3], ["..B.AAB.......CC", 3], ["CC...AAD...D..BB", 3], ["CC..AA.D...D..BB", 3], ["..C.AAC...BB....", 3], ["..C.AAC..BB.....", 3], ["CC.DAA.D..BB....", 3], [".CCD.AAD..BB....", 3]]
+  ] },
+  { name: "簡單", n: 5, levels: [
+    [["....EF...EF.AAC..DDC...BB", 3], ["....EF...EFAA.CDD..C...BB", 3], [".........B.AACBD..C.D....", 3], ["D....D..C..AACB....B.....", 3], ["........E..AAECBB.DC...D.", 3], ["...E....EC.AADC.BBD......", 3], [".....BB..C.AADC...D......", 3], [".....BB.D..AADC....C.....", 3], ["........EBAA.EBDDCCF....F", 3], ["....B...EBAA.EFDDCCF.....", 3], [".......D..AADE.CBBE.C....", 3], ["C....C.DE.AADE....BB.....", 3], ["DD......B.AACB.E.C..E....", 3], ["E.DD.E..B.AACB...C.......", 3], ["..CC.BBFF.AA.E....E....DD", 3], ["..CC.BBFF..AAE....E...DD.", 3], ["........DD.AAB....B....CC", 3], [".......DD.AA.B....B...CC.", 3], ["...BB....FDAA.FD.....CCEE", 3], ["...BB....FAA..FD....DCCEE", 3], [".CC.....FFAAE..B.E..BDD..", 3], ["BCC..B.FF.AAE....E...DD..", 3], ["E....E..CCAAB.D..B.D.....", 3], [".......CCDAAB.DE.B..E....", 3], [".......E.CAAE.C..B.D..B.D", 3], ["..E....E.CAAB.C..B.D....D", 3], ["..C.D..C.D.AA.F....FBB.EE", 3], ["..C.D..C.D..AAF....FBB.EE", 3], ["...EE...D..AAD.F...CF.BBC", 3], ["EE.......CAA.DCF..D.FBB..", 3], ["...EE..DDCAA..C........BB", 3], ["EE......DD.AA.C....C...BB", 3], [".......B..AAB.C.DD.C.....", 3], [".......B.CAAB.C.DD.......", 3], ["........CD.AACD...BB.....", 3], ["........C..AACDBB..D.....", 3], ["...EE....BAA..B..CC....DD", 3], ["...EE....B..AAB...CC...DD", 3], ["..DD..EEC..AAC.F..B.F..B.", 3], ["...DD.EEC.AA.C.F..B.F..B.", 3]],
+    [["..C.D..C.D.AA.F....F.BBEE", 4], ["..C.D..C.DAA..F....F.BBEE", 4], ["...EE....C.AADCF..D.F.BB.", 4], ["F..EEF..D..AADC....C..BB.", 4], ["...CC...BB.AAF....F.EEDD.", 4], ["..CC....BB.AAF....F.EEDD.", 4], [".........CAAEDCBBED......", 4], ["..........AAEDCBBEDC.....", 4], [".......B..AABEF.C.EF.C.DD", 4], [".C....CB.FAABEF...E..DD..", 4], [".EE....B.DAAB.D.......CC.", 4], [".EE......DAAB.D..B...CC..", 4], ["C....C.BB.AAF.E..F.E.DD..", 4], ["......BB.EAAF.EC.F..C.DD.", 4], [".DDFF....C.AA.C...BB...EE", 4], [".DDFF....CAA..C...BB...EE", 4], [".BB....CF.AACF..DDEE.....", 4], ["...BB...F.AACF.DDCEE.....", 4], [".DD....B.EAAB.E.CC.......", 4], [".DD....B.EAAB.E..CC......", 4], [".....FFBE.AABEDCC..D.....", 4], ["......FFEDAABEDCCB.......", 4], ["..FF.DDEB.AAEB........CC.", 4], ["FF.....EDDAAEB....B....CC", 4], ["..FF.EE.DCAA.DC...BB.....", 4], ["...FF.EEDC.AADC..BB......", 4], ["..BCC..BD.AA.D....E....E.", 4], ["..CC...BD.AABD....E....E.", 4], ["D....D..E.AABECFFB.C.....", 4], ["D....D.B..AABEC.FFEC.....", 4], ["...E....E.AACD...CD...BB.", 4], ["...E...CE.AACD....D....BB", 4], ["...DD..C.BAAC.B...FF..EE.", 4], ["..DD...C..AAC.B..FFB..EE.", 4], ["..FF..CC..AA.DB...DB...EE", 4], [".FF....CC..AADB...DB..EE.", 4], ["..EE...B..AABC..DFC..DF..", 4], [".EE....BC.AABC..DF...DF..", 4], [".FF...DDE.AABEC..B.C.....", 4], ["...FF.DDE.AABEC..B.C.....", 4]],
+    [["....D....DAAC.F..C.FBB.EE", 4], ["..C.D..C.D..AAF....F.BBEE", 4], ["...EE...D.AA.DCF...CF.BB.", 4], ["F..EEF...C.AADC...D...BB.", 4], ["...CC...BB.AAF....F.EE.DD", 4], ["..CC...BB.AA.F....F.EEDD.", 4], [".......ED.AAEDC.BB.C.....", 4], [".......EDCAAEDCBB........", 4], [".C....CB..AABEF...EF..DD.", 4], [".C....CBE.AABEF....F...DD", 4], ["...EE..B.DAAB.D........CC", 4], ["..EE.....DAAB.D..B...CC..", 4], [".......BB.AAF.EC.F.ECDD..", 4], ["C....C.BBEAAF.E..F....DD.", 4], [".DDFF....C..AAC...BB...EE", 4], ["...BB..CF.AACF.DD.EE.....", 4], ["..CBB..CF.AA.F.DD.EE.....", 4], ["...DD....EAAB.E..BCC.....", 4], ["..DD...B.EAAB.E..CC......", 4], [".....FFB.DAABEDCC.E......", 4], [".....FF..DAABEDCCBE......", 4], [".FF....EDDAAEB....B...CC.", 4], [".FF..DD...AAEB...EB..CC..", 4], ["...FFEE.D.AA.DC..BBC.....", 4], ["..FF..EEDC.AADC..BB......", 4], ["...CC..BD.AABD....E....E.", 4], ["..CC....D.AABD...BE....E.", 4], ["D....D.BECAABEC...FF.....", 4], [".......BECAABECD..FFD....", 4], ["...E...CE.AACD....D...BB.", 4], ["...E....E.AACD...CD....BB", 4], ["...DD..C.BAAC.BFF......EE", 4], [".DD.......AAC.BFFC.B.EE..", 4], ["...FF.CCD.AA.DB....B..EE.", 4], ["..FF.CC.D..AADB....B...EE", 4], [".DEE..DB..AABC...FC...F..", 4], [".DEE..DBC.AABC...F....F..", 4], ["FF....DD.CAABEC..BE......", 4], ["FF...DDBE.AABEC....C.....", 4], ["...CC.....AADF..EDF..EBB.", 4]],
+    [["....D....D.AA.F..C.FBBCEE", 5], ["....D....DAAC.F..C.F.BBEE", 5], ["..CBB..CF.AA.F..DDEE.....", 5], ["..CBB..CF.AA.F.DDEE......", 5], ["..BCC..BD..AAD....E....E.", 5], ["...E....E..AAD...CD...CBB", 5], ["..DCC..D...AAF..E.F..E.BB", 5], ["..DCC..DF..AAF..E....E.BB", 5], ["......BBDDAA.F...EF...ECC", 5], [".....BB.DD.AAF...EF...ECC", 5], [".D....D.BB.AAF...CF...CEE", 5], [".D....DBB.AA.F...CF...CEE", 5], ["...B....BDAACFD..CF....EE", 5], ["...B....BDAA.FD..CF...CEE", 5], ["..BCC..BE.AA.E....F..DDF.", 5], ["CC.E....E..AAF...BF...BDD", 5], ["......DD..AAFBC..FBC..EE.", 5], ["......DDB.AAFBC..F.C.EE..", 5], [".D....D.FF.AAE...CE...CBB", 5], [".D....DFF.AA.E...CE...CBB", 5], ["...F....FCAAEDC..ED...BB.", 5], ["...FC...FC.AAD...ED...EBB", 5], ["..BCC..BE..AAE..F.D..F.D.", 5], ["..CC....BFAADBF..DEE.....", 5], ["...CC...BFAADBF..DEE.....", 5], [".FF....B..AABDC.EEDC.....", 5], ["..FF...BD.AABDC..EEC.....", 5], ["..EFF..ED..AAD....C.BB.C.", 5], [".FFD....D.AA.C...EC...EBB", 5], ["..DE...DE.AA.B...CB...CFF", 5], ["..DFF..DB.AA.B...C....CEE", 5], ["..DFF..D..AA.B...CB...CEE", 5], ["..BFFDDB.C..AAC....E....E", 5], ["..BFFDDB.C.AA.C....E....E", 5], ["C.FBBC.FE..AAE....D....D.", 5], ["..FBB..FE..AAE.C..D.C..D.", 5], ["F..B.F..B..AAC...EC...EDD", 5], ["...B....B..AAC.F.EC.F.EDD", 5], [".......FF.AAEDB..EDB..CC.", 5], ["......FF..AAEDB..EDB..CC.", 5]],
+    [["..CBB..CF..AAF..DDEE.....", 6], ["..CBB..CF..AAF.DDEE......", 6], ["..DCC..DF..AAF..E....EBB.", 6], ["..DCC..D...AAF..E.F..EBB.", 6], ["......BBDD.AAF...EF...ECC", 6], [".....BBDD..AAF...EF...ECC", 6], [".D....DBB..AAF...CF...CEE", 6], ["...B....B..AAFD..CFD..CEE", 6], ["...B....BD.AAFD..CF...CEE", 6], [".CCE....E..AAF...BF...BDD", 6], ["..BCC..BE..AAE....F..DDF.", 6], [".D....DFF..AAE...CE...CBB", 6], ["...F....F..AADC..EDC..EBB", 6], ["...F....FC.AADC..ED...EBB", 6], [".FFD....D..AAC...EC...EBB", 6], ["..EFF..ED..AAD....C..BBC.", 6], ["..DE...DE..AAB...CB...CFF", 6], ["...E...DE.AADB...CB...CFF", 6], ["..DFF..DB..AAB...C....CEE", 6], ["..DFF..D...AAB...CB...CEE", 6], ["..FBB..FE.CAAE.C..D....D.", 6], ["..FBBC.FE.CAAE....D....D.", 6], ["...B....B.FAAC.F.EC...EDD", 6], ["...B.F..B.FAAC...EC...EDD", 6], ["...B.D..B.DAAC...FC...FEE", 6], ["...B....B.DAAC.D.FC...FEE", 6], ["..DCCB.D.EB.AAE....F....F", 6], ["..DCCB.D.EBAA.E....F....F", 6], ["...B....B.FAAC.F.DC...DEE", 6], ["...B.F..B.FAAC...DC...DEE", 6], [".ECC..E.D..AAD...B....BFF", 6], [".ECC..E....AAD...BD...BFF", 6], ["..D....DCC.AAF....F.BBEE.", 6], ["..D....DCC.AAF....F..BBEE", 6], ["..FCC..FE..AAEB...DB...D.", 6], ["..FCC..FEB.AAEB...D....D.", 6], ["..ECC..EB..AAB..FDD..F...", 6], ["....EC...ECAA.D..B.D..BFF", 6], ["....E....ECAA.DC.B.D..BFF", 6], ["DDCC....E..AAE...FBB..F..", 6]]
+  ] },
+  { name: "普通", n: 6, levels: [
+    [["..C....DCFF..DAAI.G..BI.GE.BH.GE.BH.", 6], [".DC....DCFF.GAA.I.GE.BI.GE.BH....BH.", 6], ["..C...EEC...AA.G.....GDD...G.B.FFHHB", 6], ["...G...EEG..AA.G....C.DD..C..BFF.HHB", 6], [".....D..BB.D...AAD.FEE...F.C.....CGG", 6], ["..........BB.FAA.D.F.EED...C.D...CGG", 6], ["...CBE..ICBEAAIDBEFF.D..G.....G.HHH.", 6], ["G....EG..C.EAA.CBEFF.DB...IDB...IHHH", 6], ["HGGFF.H...D.AA..D........ECCBB.E....", 6], ["H.GGFFH.....AA..D..E..D..ECCBB......", 6], ["DD..E.GG..E...AAE.HHC.....CBB.....FF", 6], ["DD..E...GGE..AA.E.HHC.....C.BB..FF..", 6], ["...IFF...IDCAA.IDCG..EE.G...HB....HB", 6], ["...IFF...I.CAA.IDC..EED.G...HBG...HB", 6], [".C.HEEDC.HGBD.AAGB.....F.....F......", 6], [".C.HEEDC.HG.D.AAGB.....B.....F.....F", 6], ["..CHE...CHE.AAGHI.FFG.I....DD..BBB..", 6], ["..CHE...CHE.AAGHI.FFG.I...DD...BBB..", 6], ["....D.....DE.AA.DEBB...F..CGGF..C...", 6], ["....D.....DEAAC.DE..CBBF...GGF......", 6], ["DD..B.....B..AA.B.C.EGG.C.EFF.C.....", 6], [".DD.B...E.B.AAE.B.C..GG.C...FFC.....", 6], ["..G.....GFFFAA...EDDH..E..HB.C...B.C", 6], ["..G.....GFFF..AA.EDDH..E..HB.C...B.C", 6], ["E...IIE..D..AACDF...C.F...GGBB...HH.", 6], ["..CII...C.F.EAA.F.E..D...GGDBB...HH.", 6], [".B.....B.EED...AADFF.C.D...C.....CGG", 6], [".B.....B..EE..AA.D.FFC.D...C.D...CGG", 6], [".HHIFF...I.BGAA.DBG.EEDCG...DC......", 6], ["GHHIFFG..I.BG.AADBEE..D.....DC.....C", 6], ["...IGB...IGB.AA..BHH.DFF..ED....E.CC", 6], ["...I.B...IGB.AADGBHHEDFF..E.....CC..", 6], ["G.ICCCG.IHE.AA.HE.........FBB...FDD.", 6], ["G.ICCCG.IH..AA.HE...F.E...FBB.DD....", 6], ["...HEE..BHI.AAB.IC.DD.GC....GC...FF.", 6], ["..EE....BH.CAABHIC..DDIC....G.FF..G.", 6], [".BBBC..GG.C.AA.FE....FE....FDD...HH.", 6], ["BBB.C...GGC..AAFE....FE....FDDHH....", 6], [".HHHFC.IIIFCAA.D.C...D...BB.GG.EEE..", 6], ["..HHH...III..AADFC...DFCBB.GGC..EEE.", 6]],
+    [["..C...GDC.FFGDAAI.G..BI..E.BH..E.BH.", 7], ["G.C...GDC.FFGDAAI..E.BI..E.BH....BH.", 7], [".......EE....AAG....CGDD..CG.BFFHH.B", 7], ["........CGEEAACG.....GDD.....B.FFHHB", 7], ["...C.....CBEAA.DBE.FFDBEG.I...G.IHHH", 7], ["G..CBEG.ICBEAAIDBE...DFF........HHH.", 7], [".DD.E..GG.E.AA..E...C.HH..C.BB..FF..", 7], [".DD.E..GG.E.AA..E.....HH..CBB...CFF.", 7], ["...HEED..H.BDCAAGB.C..G......F.....F", 7], ["...HEE.C.H.B.CAAGB....GFD....FD.....", 7], ["..C.E...C.E.AAGHI.FFGHI....HDD.BBB..", 7], ["...HE...CHE.AACHI.FFG.I...G.DDBBB...", 7], ["....D.....D...AADE...BBE..CGGF..C..F", 7], ["....D.....D..AA.DE...BBE..CGGF..C..F", 7], ["..DDB.....B.AA..B.C.GG..C.E.FFC.E...", 7], ["DD..B.....B.CAA.B.C...GGC.E.FF..E...", 7], ["........GFFFAAG..E.DDB.E..HB.C..H..C", 7], ["........GFFFAAG..E.DD..E..HB.C..HB.C", 7], ["..CII...C....AADF.E..DF.EGG.BB...HH.", 7], ["..CII...CD...AADF.E...F.EGGBB.HH....", 7], [".......BEE.D.BAA.DFF.C.D...C.....CGG", 7], [".......BEE.D.B.AAD.FFC.D...C.....CGG", 7], ["GHHIFFG..IDBG.AADB..EEDC.....C......", 7], [".HHIFF...ID.G.AADBG.EEDBG....C.....C", 7], ["...IGB...IGBAA...BHH..FF..ED....EDCC", 7], ["....GB...IGB.AAI.BHHE.FF..ED.....DCC", 7], ["G..CCCG.I...AAIHE....HE...FBB...FDD.", 7], ["G..CCCG...E.AAIHE...IH....FBB.DDF...", 7], ["...EEC..BHICAABHIC....DD....G...FFG.", 7], ["...HEE..BHI.AAB.IC...DDC....GC..FFG.", 7], ["..BBB....FGG.AAFC....FC...DDE...HHE.", 7], ["...BBB...FGG.AAFC....FC...DDE...HHE.", 7], [".HHH..III.FC..AAFC...D.CBB.DGGEEE...", 7], [".HHH.C..IIICAA..FC...DF..BBDGGEEE...", 7], ["...GFF...G..AACGD.H.C.D.H..EEEBB....", 7], ["...GFF..CGD.AACGD.H.....H..EEEBB....", 7], ["C.BBG.CHH.G...AAG....F.....FDD....EE", 7], ["BB....C.HHG.C.AAG....FG....FDD....EE", 7], ["......B.EEEGB.AAFGB.DDF.CCI.F...I.HH", 7], ["......B..EEEBAA.FGBDD.FGCCI.F...IHH.", 7]],
+    [[".........EE.AA.G....CGDD..CG.B.FFHHB", 8], ["........EE...AAG....CGDD..CG.BFFHH.B", 8], ["..I.BE..ICBEAA.CBE...DFFG..D..G.HHH.", 8], ["G..CBEG..CBE..AABE..IDFF..ID.....HHH", 8], ["..DDE..GG.E..AA.E..HH.....CBB...CFF.", 8], ["..DDE..GG.E..AA.E...HH....CBB...C.FF", 8], ["....E...CHE.AACHI.FFGHI...G.DD...BBB", 8], ["..C.E...CHE..AAHI.FFGHI...GDD..BBB..", 8], ["....DD....B.AA..B.CGG.B.C.EFF.C.E...", 8], ["C.DDB.C...B.C.AAB....GG...EFF...E...", 8], ["........FFFEAAG..EDDG.....HB.C..HB.C", 8], ["........FFFEAAG..E..GDD...HB.C..HB.C", 8], ["...IGB..EIGBAAE..BHH.FF....D.....DCC", 8], ["..EI.B..EIGBAA..GBHHFF.....D.....DCC", 8], ["..ICCC..IHE.GAAHE.G.......F.BB..F.DD", 8], ["GCCC..G.I...AAIHE...FHE...F.BB..DD..", 8], ["..B.EE..B.I.AA..IC..DDGC...HGC...HFF", 8], ["..BHEE..BHI...AAIC..DDGC....GC.FF...", 8], [".HHH...III.C..AAFC...DFCBB.DGG..EEE.", 8], ["..HHHCIIIDFCAA.DFC........BBGG...EEE", 8], ["...GFF...G..AACGD...C.D.HEEE..H.BB..", 8], ["....FF...G..AA.GD.H.CGD.H.CEEE...BB.", 8], ["..CC......EF..AAEF...G.F...GBB...DDD", 8], ["..CC.......F..AAEF...GEF...GBB...DDD", 8], ["..CHH...CF..AACF......D.BBEED..GGG..", 8], ["..CHH...C...AACF.....F..BBEED..GGGD.", 8], ["..I.EE..I.GFHCAAGFHC..D.....D.BBB.D.", 8], ["..I.EE.CI.G.HCAAGFH...DF....D..BBBD.", 8], ["HHEDDC..E..CAAE..CBFIII.BF.GGG.F....", 8], ["HHEDDC..E..CAAE..CBF.IIIBFGGG..F....", 8], ["......GGCB..AACB...DC.HH.DFFE..D..E.", 8], ["......GGC...AACB...DCBHH.DFFE..D..E.", 8], ["..FFF....EHHAABE....B...GIDDC.GI..C.", 8], ["..FFF....EHHAABE..G.B...GIDDC..I..C.", 8], ["..H.....H..GAAH..GBDIIFFBDCC..EE....", 8], ["..H.....H..GAAH..GBDIIFFBDCC....EE..", 8], [".....FGGCC.FE..AAFEBBDDDE......HH.II", 8], [".....FGG.CCFEAA..FEBBDDDE.......HHII", 8], ["...DD.....BH.AA.BH..E.B...EGCCFF.G..", 8], ["...DD.....B.AAE.BH..E.BH...GCC...GFF", 8]],
+    [["...CBEG..CBEGAA.BE...DFF..ID....IHHH", 9], ["...CBEG..CBEG.AABE..IDFF..ID....HHH.", 9], ["....E...CHE.AACHI..FFHI...G.DD..GBBB", 9], ["..C.E...C.E..AAHI.FFGHI...GHDD...BBB", 9], ["..DDB.C...B.C.AAB.C.GG....EFF...E...", 9], ["C.DDB.C...B.CAA.B...GG....E.FF..E...", 9], [".....E..FFFEAAG..CDDG..C..HB....HB..", 9], [".......FFF.EAAG..E..GDDC..HB.C..HB..", 9], [".....B...IGBAA.IGB.HHDFF..ED....E.CC", 9], ["....GB..EIGBAAEI.BHHFF.....D.....DCC", 9], ["..ICCC..I.E..AA.E.G.FH..G.FHBB..DD..", 9], ["GCCCE.G.IHE.AAIH....F.....FBB.....DD", 9], ["..B.EE..B.I...AAIC.DD.GC...HGC...HFF", 9], ["..BHEE..BHI...AAIC.DD.GC....GC....FF", 9], ["..HHHC..IIIC.AADFC...DF...BBGG...EEE", 9], [".HHH...IIIFC.AADFC...D.C..BBGG...EEE", 9], [".FF......G..AACGD.H.CGD.H..EEE...BB.", 9], ["FF.......G...AAGD.H.CGD.H.CEEE...BB.", 9], ["HHEDDC..E..CAAE..CBFIII.BFGGG..F....", 9], ["HHEDD...E..CAAE..CBFIIICBF.GGG.F....", 9], ["..BFFFHHBE..GAAE..GI..C..IDDC.......", 9], ["..BFFF..B.HH.AAE.....E..GIDDC.GI..C.", 9], [".....FGGCC.FE.AA.FEBBDDDE.......HHII", 9], [".....FGGCC.FE..AAFEBBDDDE.......HHII", 9], ["...DD.....BH..AABH...GB...EGCC..EFF.", 9], ["..DDB.....B..AA.BH..E..H..EGCC...GFF", 9], [".H...F.HCC.FGHAA.FG..BEE...BII.DDD..", 9], [".H...F.HCC.F.H.AAFG..BEEG..BII.DDD..", 9], ["....D.....D..FAADH.FEGGH..EC.H...CBB", 9], ["....D.....D..AA.DH.FEGGH.FEC.H...CBB", 9], ["...EE.....HF.DAAHF.D.B.F...BGG....CC", 9], ["..EE.F.....F.DAAHF.D.BH....BGG....CC", 9], ["..CDDD..CI..AACI.E..GGBEF.HHB.F.....", 9], ["..CDDD..CI..AACI..F..GG.F.HHBE....BE", 9], [".DD.B.HE..B.HEAAB.H.CGG...CFF.......", 9], ["H.DDB.H...B.H.AAB...GG...EC.FF.EC...", 9], ["...D...B.DH.FBAAH.F.G.HCE.G..CE.GIIC", 9], ["F...HCF...HC.AADHCE.GD..EBG....BG.II", 9], [".BBB..FFFH..AACH..DDCH.GE....GE..III", 9], [".BBB..FFF..G.AAH.GDD.H..E.CH..E.CIII", 9]],
+    [["....BEG..CBEGAACBE..IDFF..ID...HHH..", 10], ["....BEG..CBEGAACBE..IDFF..ID.....HHH", 10], ["....E...C.E.AACHI..FFHI...GHDD..GBBB", 10], ["..C.E...C.E..AAHI..FFHI...GHDD..GBBB", 10], ["....DDC...B.CAA.B.CGG.B...EFF...E...", 10], [".DD.......B.C.AAB.C.GGB.C.EFF...E...", 10], [".....EFFF..EAAGB..DDGB.C..H..C..H...", 10], ["...B.EFFFB.EAAG...DDG..C..H..C..H...", 10], ["...I.....I...AA..BHHFFGB..EDGB..EDCC", 10], [".........IG..AAIGBHHEFFB..ED.B...DCC", 10], ["...CCC..I.E.AAIHE.G.FH..G.F.BB.DD...", 10], ["...CCC..IH..AAIHE...F.E.G.FBB.GDD...", 10], ["FF.G..H..GD.HAAGD.........CEEE..CBB.", 10], [".FFGD.H..GD.HAAG....C.....CEEE..BB..", 10], ["HHE.DD..E..CAAE..C.FIIICBF.GGGBF....", 10], ["HHEDD...E...AAE...BFIIICBFGGGC.F...C", 10], ["..BFFFG.BHH.GAAE...I.E...IDDC.....C.", 10], ["..BFFF..BHH.GAAE..GI.EC..IDDC.......", 10], [".....FGGCC.FAA...FEBBDDDE.....E.HHII", 10], [".....F...CCFGHAA.FGH..EE.H.BIIDDDB..", 10], [".....F..CC.FGH.AAFGH..EE.H.BIIDDDB..", 10], ["..CDDD..C..EAAC..EF..GG.FHHIB....IB.", 10], [".DDD....C...AAC.....C.GGFHHIBEF..IBE", 10], ["....DDH...B.HAA.B.HEGGB..ECFF...C...", 10], ["...DD.H...B.H.AAB.HGG.B..EC.FF.EC...", 10], ["F...H.F..DH..AADHC..G..CEBG..CEBG.II", 10], ["...DH.F..DHCFBAAHC.BG..CE.G...E.GII.", 10], ["..BBBGFFFH.G.AAH..DDCH..E.C...EIII..", 10], ["BBB...FFFH.GAA.H.GDDCH..E.C...E.III.", 10], ["B.....BGGII..AAHD.CCCHD...FHEE..F...", 10], ["......B.GGIIBAAHD.CCCHD...FHEE..F...", 10], [".HHH......G.AAB.G.D.B.F.D.CCF.....EE", 10], ["HHH.G...B.G.AAB.F.....F.D..CC.D...EE", 10], ["..C.....CEEB..AADB...IDB.GGIHH....FF", 10], ["..C..B..CEEB..AADB...ID..GGIHH....FF", 10], [".CDDF..C..F..AABF....BEE...B........", 10], [".CDDF..C..F.AA.BF....BEE...B........", 10], ["........GGHD..AAHDBBICCD..IFEE...F..", 10], ["....H...GGHD..IAADBBICCD...FEE...F..", 10], [".HHH.B..C..BAAC..BF.EE..FIIGGGF...DD", 10]]
+  ] },
+  { name: "困難", n: 6, levels: [
+    [["..KJIIHHKJB.CEAABGCEDDFG.E..F.......", 11], ["..KJIIHHKJ..CEAABGCEDDBG.E..F.....F.", 11], [".CCIK..B.IK..BAAKDHH...D..EFFJ..EGGJ", 11], ["..EICC..EIKD..AAKD.HH.KJ.B.FFJ.B.GG.", 11], ["....I.DG..I.DGAAI..EEBKKH.CBFFH.CJJ.", 11], ["D.C.I.D.C.I..AA.I.HGEEKKHG.BFFJJ.B..", 11], ["....F.....FHI.AAFHIDDBBHGGGE.....ECC", 11], ["....F.....F.I.AAFHIDDBBHGGGE.H...ECC", 11], ["...BBB..EGGGAAED.HIIFD.H..FKKC...JJC", 11], ["...BBBGGG..HAAED.HIIED.CKKF..CJJF...", 11], ["...BKKFFHB.D.EHAAD.E..GGIJJJ.CI....C", 11], ["I..KK.I.HFFDAAHB.D...BGG.EJJJC.E...C", 11], ["..HHHF..C.KFAACEK.DDDEKBIG...BIG.JJ.", 11], ["HHH.KF..CEKFAACEKB.GDDDBIG....IJJ...", 11], [".....H..KEJHAAKEJHCBBFFFC.GGDDII....", 11], [".....H..KEJHAAKEJHCBBFFFC.GGDD....II", 11], ["JDDCEEJ..CI.AA.CI..H.FFF.HBB....GG..", 11], ["JDDCEEJ..C..AA.C...FFFI..HBBI..HGG..", 11], ["BB.KFFDIIKC.D.AAC.JJG.HH..GEEE......", 11], [".BB.FF.IIKC..AAKC.DJJHH.D.GEEE..G...", 11], [".HH.J.G...J.GAA.JC.BFF.C.BDEEC..DII.", 11], [".HH.J.G...J.GBAAJC.BFF.C..DEEC..D.II", 11], ["IHHF.DI..F.DAAB....CB....CGGEE......", 11], ["IHHF.DI.BF.DAAB..........CGGEE.C....", 11], ["IBBB.CI.E.HCAAE.H..D.....DFGG...F...", 11], ["I.EBBBI.E...AAF.HC..F.HC.DGG...D....", 11], ["....JI...HJI.AAHGD..KKGD.C.EFF.C.EBB", 11], ["...HJI...HJI..AAGDKK.EGD.C.EFF.C..BB", 11], [".....H...KEHCAAKEJCDGGEJ.DIFFJ..IBB.", 11], ["....E....KEHCAAKEHCDGG.J.DIFFJ..IBBJ", 11], [".FFCCD..HHBDAA.EB.I..EB.I..JGG...JKK", 11], ["FFCCBDHH..BDAA.EB.I..E..I..JGG...JKK", 11], [".DJFEEKDJFB.KAA.B.K..H.....HIGCC..IG", 11], ["..JFEE..JFBGKDAABGKD....K..HI.CC.HI.", 11], ["..DDD...HH.G..JAAG..JCCG...FII.BBFEE", 11], ["..DDDG...HHG..JAAG..JCC....FII.BBFEE", 11], [".J.II..JDDFCAAK.FCB.KEEHBGGG.HB.....", 11], [".J.II..JDDF.AAK.FCB.KEECB.GGGHB....H", 11], ["F.EE.IF.G.DIAAGKDIHHHK...BJJJ..BCCC.", 11], ["F.EE..F.GKDIAAGKDIHHH..I.B.JJJ.BCCC.", 11]],
+    [[".CCI.D.B.IKD.BAAKJHHE.KJ..E.FF...GG.", 12], [".CC..D....KDAA..KJ.BHHKJ.BEIFFGGEI..", 12], ["....I.D..BI.DAABI.HGEEKKHGC.FF..C.JJ", 12], ["....I.DG..I.DGAAI.HEE.KKH.CBFF..CBJJ", 12], ["BBB...GGGD.HAAED.HIIE..CKKF..C..FJJ.", 12], ["BBB....GGG.HAAED.HIIED.CKKF..C..FJJ.", 12], ["KKHB...EHBFFIE.AADI..GGDJJJ..C.....C", 12], ["I.HKK.I.HBFF.AAB.D.E.GGD.EJJJC.....C", 12], ["IHHHK.I.CEKFAACEKF.GDDD..G...B.JJ..B", 12], ["..HHHF..CEKFAACEK..DDDKBIG...BIG..JJ", 12], [".DDCEE...C..JAAC..JHFFF..HBBI..GG.I.", 12], ["JDDCEEJ..C...AAC...H.FFF.HBBI..GG.I.", 12], [".BBFF..II.C.DAAKC.DJJKHH..GEEE..G...", 12], ["DBBFF.D.IIC..AAKC..JJKHH..GEEE..G...", 12], [".HH.JCGB..JCGBAAJC.FF.....DEE...D.II", 12], [".HH.J..B..J.GBAAJCGFF..C..DEEC..D.II", 12], ["..BBB...E.HCAAE.HC......IDF.GGIDF...", 12], ["BBB..C....HCAAE.H.IDE...IDFGG...F...", 12], ["...HJI...HJI.AAEGD.KKEGD.C..FF.C..BB", 12], ["...HJI...HJIAA.EGD.KKEGD.C..FF.C..BB", 12], ["FFCCBD..HHBDIAAEB.I..E.....JGG...JKK", 12], ["FFCCBD..HHBDAA.EB.I..E..I..JGG...JKK", 12], [".DJ.EEKDJF..KAAFB.K..HBG...HIGCC..I.", 12], [".D.EE..D..B.AAJFBGK.JFIGK..HI.K..HCC", 12], [".J.II..JDDFCAAK.FCB.K.EEB.GGGHB....H", 12], [".J..II.JDDFCAAK.FCB.K.EEB.GGGHB....H", 12], [".BEEDI.B.KDI.AAK.I.HHH..F.GJJJF.GCCC", 12], ["FEEK..F.GK..AAG.DIHHH.DI.BJJJI.B.CCC", 12], ["B.HHKFB.E.KFAAE..F..ECCCDDGGG..IIJJJ", 12], ["BHH..FB...KFAAE.KF..ECCCDDEGGG.IIJJJ", 12], ["IIEEED.GG..DH.AAJ.H.CCJ...F.BBKKF...", 12], ["IIEEED...GGD.AA.J.HCC.J.H.F.BBKKF...", 12], ["..HEBB..HE..AAG..C..G.JC.DFFJC.D..II", 12], [".DBBJC.D..JCAAH..C..H.....GEFF..GEII", 12], ["....F...G.F.AAG.B..II.BHECDJJHECD..H", 12], ["E.G.F.E.G.F.AAD.B.IID.BH.CJJ.H.C...H", 12], ["EEE.CI....CIAAG.C.B.GDDFB..HHFB....F", 12], [".EEEC.....CI.AA.CIB.GDDFB.GHHFB....F", 12], ["BBFD..HHFD..GAAD.EGCCC.EG...........", 12], ["BBFD..HHFD..GAAD..G.CCCEG....E......", 12]],
+    [["..CCKD..E.KDAAE.KJ.B.HHJ.B.IFFGG.I..", 13], [".CC.KD....KD.AA.KJ.BEHHJ.BEIFF.GGI..", 13], ["....I.DG..I.DGAAI.HEEKK.H.CBFF..CBJJ", 13], [".BBB..GGG...AAED.HIIED.H..FKKC..FJJC", 13], ["BBBD..GGGD.HAAE..H..EII.KKF..CJJF..C", 13], ["I...KKI.HBFFAAHB.D.GG..D.EJJJC.E...C", 13], ["KKHB..IEHBFFIEAA.DGG...D.JJJ.C.....C", 13], [".HHHKFI...KFIAAEK.DDDE.B.GC..B.GC.JJ", 13], ["...HHHI..EKFIAAEKFDDD.K..GC..B.GCJJB", 13], ["JDDCEEJ..C..AA.C...HFFF..HBBI..GG.I.", 13], ["JDDCEEJ..C..AA.C...H.FFF.HBBI..GG.I.", 13], ["BBFFC.D.IIC.DAAK..JJ.KHH..GEEE..G...", 13], ["DBB.FFD.IIC.AA.KC.JJ.KHH..GEEE..G...", 13], [".BBBH...E.H.AAE..C.DF..CIDF.GGI.....", 13], ["IBBBHCI...HCAAE.....E....DF.GG.DF...", 13], ["....JI...HJIAA.HGD.KKEGD.C.EFF.C..BB", 13], ["...HJI...HJI.AAEGD.KKEGD.C..FF.C.BB.", 13], [".DEEB..D.FB..AAFIGK.J.IGK.JH..KCCH..", 13], [".DJEE..DJ.B.KAAFB.K..F.GK..HIGCC.HI.", 13], [".B.EE.FB..DIFAAKDIHHHK.I..GJJJ..GCCC", 13], ["...KEE...K.I..AADI.HHHDIFBGJJJFBGCCC", 13], ["B.EHHFB.E.KFAAE.KF...CCCDDGGG.II.JJJ", 13], ["B.EHHFB.E.KFAAE.KF...CCCDD.GGG.IIJJJ", 13], ["E...FHE.G.FHAAG.BHIID.B..CD.JJ.C....", 13], ["....F...G.FHAAG.BH.II.BHECD.JJECD...", 13], [".EEEC.....CIBAA.CIB.GDDFB.GHHF.....F", 13], [".EEE......CIAA..CIB.DDCFB.GHHFB.G..F", 13], [".EECCCBB...D.AA.KD.HHHKG..IJJGFFI...", 13], ["EE.CCC.BB..D..AAKD.HHHKG..IJJG..I.FF", 13], ["FDDKJJF..KGGAA...B.CHIIB.CH..E..H..E", 13], ["FDDKJJFCHKGG.CHAABIIH..B.....E.....E", 13], ["B..JJ.BGG.FH.AA.FH.EIIIH.EKCCC.EKDDD", 13], [".E..JJ.EGGFH.EAAFH..IIIHB.KCCCB.KDDD", 13], ["HHH..C.II..CAAB..C.KBEEEJKFFGGJ..DDD", 13], ["..HHHC.II..CAAB..CJ.BEEEJKFFGG.K.DDD", 13], [".FFFKK..BB..AAC..JDDC..J.HEEEJ.HGGII", 13], ["FFF.KK..C.BBAAC..J.DD..J.HEEEJ.HGGII", 13], ["FEGDDDFEG.J...AAJH.KKK.HII..CHBB..C.", 13], ["FEGDDDFEG.J...AAJ..KKK.HII..CHBB..CH", 13], ["ECCB.JE.GB.JAAG.KH.FIDKH.FID.H.F....", 13]],
+    [["CCE.KD..E.KDAA..KJ.B.HHJ.B.IFF.GGI..", 14], ["CCE..D..E.KD.AA.KJ.BHHKJ.B.IFFGG.I..", 14], ["BBB.....GGGHAAED.HIIED....FKKC..FJJC", 14], ["BBB..H..GGGHAAED..IIED....FKKC..FJJC", 14], [".KKB..I.HBFFIEHAAD.EGG.DJJJ..C.....C", 14], [".KKB.....BFF.EHAADIEHGGDIJJJ.C.....C", 14], ["HHH..F....KFAA.EKBDDDEKBIGC...IGC.JJ", 14], ["HHH..FI....FI.AAKBDDD.KB.GCEK..GCEJJ", 14], ["DBBKFFDIIKC.AAG.C.JJG.HH.EEE........", 14], ["BBFFC.DIIKC.DAAK..JJG.HH..GEEE......", 14], [".BBBHC..E.HCAAE...ID....IDF.GG..F...", 14], ["BBB.HC....HCAAE.....E...IDF.GGIDF...", 14], ["...HJI...HJIAA.EGD.KKEGD.CFF...C.BB.", 14], ["...HJI...HJI.AAEGDKK.EGD.CFF...C.BB.", 14], [".DJEE.KDJFB.KAAFBGK....G...HI.CC.HI.", 14], ["KDJEE.KDJ.BGKAAFBG...FI....HI.CC.H..", 14], ["...KEEF..KDIF.AADI..HHHI.BGJJJ.BGCCC", 14], [".B.KEEFB.KDIF.AADIHHH..I..GJJJ..GCCC", 14], ["B.EHHFB.E.KFAAE.KF...CCC.DDGGG.IIJJJ", 14], ["B.EHHFB.E.KFAAE.KF.CCC..DDGGG.II.JJJ", 14], ["..G.F...G.F.AAD...IID.BHECJJBHEC...H", 14], ["....F...G.FHAAG.BHIID.BHECDJJ.EC....", 14], ["..EEE.....CIAA..CIB.DDCFB.GHHFB.G..F", 14], ["EEE.CIB...CIBAA.C.B..DDF..GHHF..G..F", 14], [".EECCCBB...D.AA.KDHHH.KG..IJJG..I.FF", 14], ["EE.CCC...BBD.AA.KDHHH.KG..IJJG..I.FF", 14], ["FDDKJJF.HKGGAAH..B.CHIIB.C...E.....E", 14], ["FDDKJJF..KGGAAH..B.CHIIB.CH..E.....E", 14], ["BE.JJHBE.GGH.EAAFHIII.F...KCCC..KDDD", 14], [".E..JJBEGGFHBEAAFH.III.H..KCCC..KDDD", 14], ["FEGDDDFEG.J.AA..J...KKKH.II.CH..BBCH", 14], ["FEGDDDFEG.J.AA..JHKKK.CHII..CH.BB...", 14], ["ECCBK.E..BKJAAGD.J.FGD.H.FI..H.FI..H", 14], ["ECCBKJE..BKJAAGD.H.FGD.H.FI..H.FI...", 14], [".......GGGFF.AA.EK.BB.EKD.CHHJD.CIIJ", 14], ["......DGGGFFD.AAEK..BBEK..CHHJ..CIIJ", 14], ["KKFFC.B...C.BDAACGBDHEEGI.H...I.JJ..", 14], ["KKFFC.B...C.B.AACGBDHEEGIDH...IJJ...", 14], ["...JDD...JH.AA.IHGF.KIHGFCKEEGFC.BB.", 14], [".DDJ.....JHGAA..HGFC..HGFCKIEEF.KIBB", 14]],
+    [["CCE.KD..E.KD.AA.KJ.BHH.J.B.IFF.GGI..", 15], ["CCE..D..E.KD.BAAKJ.BHHKJ...IFFGG.I..", 15], ["BBB..H..GGGHAAED.CIIED.C..FKK.JJF...", 15], ["IKKB..IEHBFF.EHAADGG...D.JJJ.C.....C", 15], [".KKB...EHBFF.EHAADIGG..DIJJJ.C.....C", 15], [".HHH.....E.F.AAEKFDDD.KBIGC.KBIGCJJ.", 15], ["D.BBFFD.IIC.AAGKC.JJGKHHEEE.........", 15], ["...HJI...HJI.AAEG.KK.EGD.CFF.D.CBB..", 15], [".B.KEEFB.K.IFAA.DI.HHHDI..GJJJ..GCCC", 15], ["...KEEFB.KDIFBAADI.HHH.I..GJJJ..GCCC", 15], ["B.EHHFB.E.KFAAE.KF.CCC...DDGGG.IIJJJ", 15], [".CG....CG..HAAD.FHIID.FHEJJ.B.E...B.", 15], ["E.G...E.G.F.AAD.FHIID..H.CJJBH.C..B.", 15], ["..EEEI....CIAA..C.BDD.CFB.GHHFB.G..F", 15], [".EECCC...BBD..AAKD.HHHKG..IJJG..I.FF", 15], [".EECCC...BBD.AA.KD.HHHKG..IJJG..I.FF", 15], ["BE.JJ.BE.GGH.EAAFHIII.FH..KCCC..KDDD", 15], [".E..JJBE.GGHBEAAFHIII.FH..KCCC..KDDD", 15], ["FEGDDDFEG..H.AA.JHKKK.JHII..C...BBC.", 15], [".EGDDD.EG.J...AAJHFKKK.HF.IICHBB..C.", 15], [".......GGGFF..AAEKBB..EKD.CHHJD.CIIJ", 15], ["F..JDDF..JH.FAAIHG...IHG.CKEEG.CK.BB", 15], ["F.DDH.F..JHGFAAJHG.....G.CKIEE.CKIBB", 15], [".BBJJ.HHH.K.AA..K.CCGGK.F.EEE.FDD.II", 15], [".BBJJ.HHH.K.AA..K.CCGGK.F.EEE.FDDII.", 15], ["FJCCD.FJ.IDHFAAI.HGGGEBH...EB.......", 15], ["FJCCD.FJ.ID.FAAIBHGGGEBH...E.H......", 15], ["KKHHIGEC..IGEC.AAGE.DDD....FBBJJJF..", 15], ["KK.HHG....IGEAA.IGEC.DDDEC.FBBJJJF..", 15], [".KKHHH..DIIIAAD..EFBBJCEF..JCGF..JCG", 15], [".BBB.H..GGGHAAED.CIIED.C..F.KKJJF...", 16], ["..HHHF.....FAA..K..DDDKBIGCEKBIGCEJJ", 16], ["DBBFF.DIIKC.AAGKC.JJG.HH.EEE........", 16], ["...HJI...HJIAA.E..KK.EG..CFFGD.C.BBD", 16], ["B.EHH.B.E..FAAE.KFCCC.KF.DDGGGII.JJJ", 16], ["..EEEI....CIAA..CFBDD.CFB.GHHFB.G...", 16], ["......GGG.FFAA..EK.BB.EKD.CHHJD.CIIJ", 16], [".EEE.D..F.IDAAF.I...GBBH..G..H.CCC.H", 16], ["EEE.ID..F.IDAAF.....GBBH..G..H.CCC.H", 16], ["KKHHH...DIIIAAD.CEFBBJCEF..JCGF..J.G", 16]]
+  ] },
+  { name: "挑戰", n: 6, levels: [
+    [["IF.MKKIF.M.BAAC..BGGCHH.E.CLDDEJJL..", 17], ["CCCHHE...I.EAA.IFGKJJJFGK..DD.K..BB.", 17], [".CCCD.JJ..D..AA.H.FGEEH.FG.BKKFIIB..", 17], ["HH..FF.IIILE.AAJLE...JBBK.CDDDK.CGG.", 17], ["LII.JBL...JB.AAGJ..KEG.MFKEDDMFCCHH.", 17], ["LLCF....CFIIKAA.BDK.GGBD..HJJ.EEH...", 17], ["HC.KK.HCED..AAED..JJE...IFFB.GI..B.G", 17], ["......BBBD.JAAEDCJK.E.CGKFFFCG..HHII", 17], [".LGGGCJLBBBCJAAI..F.EIHHF.EMMD...KKD", 17], [".K.CC..KDF..AADFGE..DFGEJHH.ILJ.BBIL", 17], ["HHFF.EIIIJLEKAAJL.K..BB...CDDD..CGG.", 17], ["IKKH..IB.HGG.BAA.DCC...D.FF..JEELL.J", 17], [".FEECG.F..CGIHAAC.IHB...IHBJDDKKKJ..", 17], ["..EGG...EJJFC..AAFC.KIIFBBKHLLDDDH..", 17], ["EE..B.GIIJB.GAAJB.F..HH.F.KCC.DDK...", 17], ["III...GKKK.BGAA.FBCCE.FBMHEDDDMHJJLL", 17], ["F.KJJJF.K.BBFAAH.L.CCH.L...IGDEE.IGD", 17], ["CC..MF.E..MF.E.AAFKK.GJJHIIGDDHBBBLL", 17], [".FGGG.JFCC..JAAD..JK.DHH.KBBLEIII.LE", 17], ["..IDD.J.I.BCJAAGBCFFFGBLKK.H.LMM.HEE", 17], ["JDDD..J.IKKKAAIMHF.C.MHF.CEEEB.GGLLB", 17], ["H.LLCCH..IIGAAB.EG.JB.EK.JFFFK.JDD..", 17], ["..BBBI.EEEDI.AA.DJ..F.DJGHFKK.GH.CCC", 17], ["F..BB.FEEECCAA.DJKGGGDJKLL..II...HH.", 17], ["..III.GKKK.BG.AAFBCCE.FBMHEDDDMHJJLL", 17], ["KKLLCJ..B.CJAABDC...HDGG..HEII...EFF", 17], ["HBJJ.LHB.D.LFAAD..F.GGGMEEC..MKKC.II", 17], ["GEE..FGHHJDFAAMJD..CMI...CBI.L.CBKKL", 17], ["BBB.CF..I.CFAAI.J.K...JEKDHHJE.D.GG.", 18], ["LLEHDD..EHGGAA.H..MMFF.IKC..JIKCBBJ.", 18], [".DDDJJLLII.GAAHEBGM.HEB.M.FF.K..CCCK", 18], [".MCC.I.MFFJI..AAJIGGEDD.B.ELHHBKKL..", 18], ["..EEKK..BFJDAABFJDL.BGGHL..CCH....II", 18], ["EEEI....JILLAAJCGK.FFCGKBHH.DMB...DM", 18], [".EE.....JJJ.AADCG.K.DCGIKHLBBI.HL.FF", 18], ["BBBE.....EII.KCAAFLKCHHFL.C.GDJJ..GD", 18], ["...DCJBBBDCJAAE.C...E...K.FFFGKHHIIG", 18], ["IHHKB.I..KBLDJAABLDJE...D.ECCCFF..GG", 18], ["I.LLKKI.F..BAAF.GB.HJJG..HCCCDEE...D", 18], ["DDD..I.EE.JIAAH.J...H.B..GFFB..G.CC.", 18]],
+    [["GJJ.DDG..FF.AAIE....IEKHBBBEKHLLCC..", 19], [".KKDDD.BBBL.AA..LCIIFGGCE.FJ.CEHHJ..", 19], ["EEEJDH.IIJDHAABG....BGKK..B.FL.CCCFL", 19], [".DFF.J.DG..JAAGCBI...CBI..HE.I..HEKK", 19], ["HHHF.B.IIF.BAA.F.GJDD..GJ.ECCC..E...", 19], ["CHHGGJC.BBBJAAFE....FED.III.D.....D.", 19], ["FFLL..DD.I..AAEIJK..EBJKG.EBHHGCC...", 19], ["...JJJGGLMHHAALM.KBFEEEKBFI.DDCCI...", 19], ["L.FF..LBB.H.AAG.H.DDG..CKKKIICJJ..EE", 19], ["FDJJIIFDBBBKFD.AAK.CCE.K...EGG..HH..", 19], ["HGG...HJJEEEAAC..MDDC..M.KBBLI.KFFLI", 19], ["LLLFBI...FBIAAD.CK..DHCKJEEH..J.GGG.", 19], ["..CHHHEEC.DIJAAFDIJ..FK...BBK...GGG.", 19], ["EEM.....MCC.AAMLIH.GGLIHJBDDDHJBFFKK", 19], [".DDDIHCCB.IHAAB...G.E..FG.EJJF.....F", 19], ["FFFJE...GJE.AAG.E.H.G..DHB.CCD.B.IID", 19], ["EEECIIBB.CJ.AA..JK..F.JKM.FDDHMLLGGH", 19], ["...MCCFKKMGBFJAAGBDJHHHBD.LIIIEEL...", 19], [".FFLLK.DDI.KAAEIJ.G.EBJ.G.EBHH...CC.", 19], [".KKK.HGJD..HGJDAAL.BBE.LI..EFFI.CCC.", 19], ["IIGJ.D..GJFDBAAJF.BC....BC.HHLEEKK.L", 19], ["I.FMMMI.FDHHAAFDBK.GGLBK.JJLC..EEEC.", 20], ["KLLFF.K.GG..AAEDI.HHEDIB.JCCCB.J....", 20], ["..DDFL...EFLHAAEFMH.JIIMBGJKKMBGCC..", 20], ["IHHH..IC..GDICAAGD..EEG...F.BBKKFJJ.", 20], ["BBBJJ..GGMEFAA.MEF.DDD.CH.IKKCH.I.LL", 20], [".CHHHF.C..GFDAALGKDBBL.KD.EIIKJJE.MM", 20], ["JGBBB.JGDD.IJAACMIEE.CM...FHHKLLF..K", 20], ["DDDJJ..LL.IIAAHE.G..HE.GMFF.BKMCCCBK", 20], ["H.KK..H.I.CEAAIGCEBBBGCJDD.LLJ....FF", 20], ["DDD.J...EEJ...AABI..H.BI.GHFF..GCC..", 20], [".GCCCD.GBBBDAAM.L.KKM.L.IEEFFFIHHJJ.", 20], ["CCC..DMMGGGD..AAKIEJJ.KIE.BFLL..BFHH", 20], ["I.HHH.IC..G.ICAAG.EEF.GD..FBBDKK.JJ.", 21], ["KHDD.EKHII.EAAGJ....GJFF..BCCCLLB...", 21], ["B.HHDDB.EFGGAAEFL..II.LM.JCCLM.JKK..", 21], ["II..EBH.L.EBH.LAAJHC.FFJ.C.KDDGGGK..", 21], ["EE.KK...BF..AABFJDGGB.JDL.CC.HL.II.H", 21], ["KDDE.IKJJEMIAALEMFGGLCCF.HHH..BB....", 21], ["DDGGGF...L.F.AALEKICCLEKI.HJJJ..HBB.", 21]],
+    [[".K..DD.KIIB..KAABGEEF.BG..F.JJ.CCHH.", 22], ["DD.E..JJJEC..AABC.KK.BCGF.HIIGF.H...", 22], [".D.II..DGH..AAGH.B..GCCBFFF.EB.JJ.E.", 22], ["CCHI..K.HIGGKAAJE.KBBJE..L.FFD.LMM.D", 22], ["II..BGK.HHBGKAAJB.D.LJFFD.LJCCEEE...", 22], ["ILL.DDICCCBJAAH.BJFFHK..GGGK...EEE..", 22], ["JJJMH.CCCMHEAAD.FE..DKFIGBBK.IGLL...", 22], ["DGGHH.D.IELLAAIEBF.CJJBF.CKKB.......", 22], ["HCKKL.HCIILJHAAE.JBBGE.J..G.FF..DDD.", 22], ["...FCC..DFGEAADFGEJ.D.ILJKHHIL.K.BB.", 22], ["JGGG..J.MBLLAAMBC.KKDDC..E.FFI.EHH.I", 22], ["LGHDDCLGH.BCAAI.BCKKIJ..EEEJ...FF...", 22], ["B..HMMB..HGGAAEH...CEFF.JCDDLKJIIILK", 22], [".LHHKK.LJJ..AAG..IDDGFBIEMMFBCE..F.C", 22], ["IEE.JJI.CCKHIAA.KHDDLGKH.MLGFF.MBBB.", 22], ["III.F..DD.FGC.AAFGC.EHHKLLEBBK..JJJK", 22], ["HHCL.IBGCL.IBGAA.IBEEK.....KFF.JJDD.", 22], ["HHIIFBJJJ.FB..CAAE..C..EG.CKDDGLLK..", 22], ["DCHHHFDC.L.FDAALGKBBE.GK..EIIK..JJMM", 22], ["..HLLL..H.DKGAA.DKGBBJJKEEEI...CCIFF", 22], [".IIF..HLCFMMHLCAAG.DDD.G.JJJ.EKKBBBE", 23], ["KDD.MIKJJEMIAALE..GGLECCHHH..F.BB..F", 23], ["BBBMJJGGIM..AAI..FDDD.EFH.KKECH..LLC", 23], ["BBBJJFGGIMEFAAIME.HDDD.CHKK..CLL....", 23], ["ICHHH.IC..G.IAA.GD.EE.GD..F.BBKKFJJ.", 23], [".BLLHH.BDF.GAADF.GKCCEEJKII..J..MMM.", 23], [".CE.KKJCEDD.JAA.I.....IHBBB.FH.GG.FH", 23], ["HCCJD.HKKJDIGMAADIGMF..E..FBBE...LLL", 23], ["JJJFHKCCLFHKAALEM.G..EMBG..DDB.II...", 23], [".FF.HL.M..HL.MAABLKKJ.B.G.JDEEGCCDII", 23], ["HHH...FFBG..AABGJK.ELLJK.EIIJKDD..CC", 23], ["EEEIIK.BB..KAAF.JH..FCJHMDDCJ.MLL.GG", 24], ["B.FFI.B..HI.AACH....CGDDEEEGKJ....KJ", 24], ["BMMLLHB.II.HAAKG..JJKGCC..DDDF.EEE.F", 24], ["HKK..EH...CE.AAGC.BBBGC.DDILLJ..IFFJ", 24], ["FFELL.DDEI..AAEI..G..B.KGHHBJK.CC.J.", 24], ["DDGFLC.MGFLCHMAA.CHEEJ.....JII.BBBKK", 24], ["GII.HJG.B.HJAAB.H..LDDD..LFFFK.EECCK", 24], ["EEEIIKBB.C.KAAFCJHM.F.JHM.DDJ..LLGG.", 24], ["IFCMKKIFCM..AACL..EGGLHHE.DD.BJJ...B", 24]],
+    [[".KK..JHCIILJHCAALJHBBE....GEFF..GDDD", 25], ["EEEIGKLLJIGKAAJC.MFF.CDMBHH.D.B.....", 25], [".LHHKK.LGJJIAAGFBIEDDFBCEMMF.C......", 25], ["BHHDD.B.EFGGAAEF.M.JIILM.JCCL..KK.L.", 25], ["FK.IGGFKJI.DF.JAADH.LL..H.BCCEMMB..E", 25], [".HHHEE.IICCJAA.B.JL..BGGL.DKKK..DFF.", 25], ["DD.E.GJJJECG..AAC..KKBC.F.HBIIF.H...", 25], ["BBBJJ.GGI...AAI..FDDD..FHKKMECHLLMEC", 25], [".CCCFKI.LLFKIAA.F.GGG..HBBD..HJJD.EE", 25], ["KKKFGEJ..FGEJ.AAG..HCLLD.HCIID.BB...", 25], ["LLJJJFCCC..FAAM..K..MIIKH..BEEHGGBDD", 25], ["EE.J.BL..JGBLAAIG.C..IFFC.DKKM..DHHM", 25], ["H.JJCEHFFLCEBAALC.BIIM....GMKKDDG...", 25], ["LLLI.K..HI.KAAH..KG.BBJJGEEED.CCFFD.", 25], [".HDD.E.HII.EAAGJ....GJFFK.BCCCK.BLL.", 25], ["EEM.....MLCCAAMLI..BGGIHJBDDDHJFFKKH", 25], ["..FFHHMMMBBEAAG..EC.GJKICDDJKI....LL", 25], [".JJJHHCCDK..AADK.MLIIEEMLGG.F..BBBF.", 25], ["II..KL.BBBKLF.AADJFG..DJ.GCEE...C.HH", 25], ["JJJMHECCCMHEAA..FIG.D.FIG.DKBB.LLK..", 25], ["LLL.BIJ..FBIJAAFCK..DHCK..DHEE..GGG.", 26], ["HKK..JHCIILJHCAALJBBGE....GEFF..DDD.", 26], ["BMM.LLB.II.HAAKG.HJJKGCC..DDDF..EEEF", 26], ["HEDD.JHEGK.JAAGK.CF..MMCFIIIL.FBBBL.", 26], [".KKKGE...FGEAA.FG.JH..LLJHCIIDBBC..D", 26], ["ILLDD.ICCC..AAHK....HKFF.GGGBJEEE.BJ", 26], ["IDDDF.I...FBAA.GEB..HGE...HJKKCC.J..", 26], ["GGGII...EFFCAAED.C.KKD.HL.BB.HLJJJ.H", 26], ["K.DDM.K.JJMIAALE.IGGLECCHHHE.F..BB.F", 26], ["CCCGGMIIL..MAALH.KFBBH.KFDD.J...EEJ.", 26], ["DDGGGF...LEFIAALEKICCL.K..HJJJBBH...", 26], ["B.CHFFB.CHI..AAGIJ.DDG.JEEE.K.....K.", 27], ["JJJHHMCC...MAADK..IIDKEEL.GGF.LBBBF.", 27], ["LLLFCK.IIFCKAA.M.DBGGM.DB.HEED..H.JJ", 27], ["DD..CGJJJECGFAAEC.F..KK...HBII..HB..", 27], [".HHH.K.FF.JK.AA.JKLLBGJ..EBGII.EDDCC", 27], ["HJJLC.HFFLC.AA.MC.B.GMIIB.GKKE..DD.E", 27], ["JJ.CEDFM.CEDFMAAELH.BB.LH.GIII..GKKK", 27], ["HHHEE..IICCJAA.B.JL.DBGGL.DKKK...FF.", 27], ["..M.EE..MLCCAAMLI.JBGGIHJBDDDHFF.KKH", 27]],
+    [["CCCGGM.II..MAALH....LHBBF.DDJKFEE.JK", 28], ["..EBBBD.E.CGDAAICG.FFICG.H.LL..HJJKK", 28], ["CCC..KI..LLKIAA.FH.GGGFHBBD.F.JJD.EE", 28], ["CCCGGM.II..MAALH....LHBBF.DDJKF.EEJK", 28], ["F.JGGDF.J..DFAA..E.KBLLEHKBICCHMMI..", 28], ["B.MMLLB.KIIHAAKG.HJJ.GCC.DDD.F.EEE.F", 28], ["JJJ.HECCCMHE.AAMFIG..KFIG.DKBB..D.LL", 28], ["...KKEH...CEH.AACJ.BBBCJDDIGLLFFIG..", 28], [".HHFFFLL.MBBAA.M.IK.DDDIK.GEEICCGJJ.", 28], ["FKGG.DFKJ..DF.JAAE..BLLEH.BICCHMMI..", 28], ["K..EDDKJJEMIAALEMIGGLCC.HHH..F.BB..F", 28], ["HHH.....FFJK.AAGJKLLBGJK.EB.II.EDDCC", 28], [".DDF.C.M.FLC.MAALCEEGJ..H.GJIIHBBBKK", 28], ["B.MMLLB.KIIHAAK..HJJ.GCCDDDG.FEEE..F", 28], ["CCCHHB..J..BAAJ..LKDDIILK.EEF...GGF.", 28], ["..EBBB..E.CG.AAICGFF.ICGDHLL..DHJJKK", 28], ["JJJHHM...CCMAADK..IIDKEELGG.F.LBBBF.", 28], ["CCC..KLL...KI.AAFHIGGGFHBBD.F.JJD.EE", 28], ["JJ.L..HFFLC.HAAMC.BIIMC.B.GKKEDDG..E", 28], [".BLLHH.BD...AAD..GKCCEEGKIIF.JMMMF.J", 28], [".JJCEDFM.CEDFMAAELBBG..LH.GIIIH.KKK.", 28], [".BLLHH.BD..GAAD..GKCCEEJKIIF.JMMMF..", 28], ["GGG.II..EFFCAAE..CLKKD.HLBBD.HJJJ..H", 29], ["..CHFF..CHI..AAGI.BDDGKJBEEEKJ......", 29], [".EDDLJHE..LJHAAK.CFMMK.CF.GIIIF.GBBB", 29], ["K.HHFFKIIIL.AACJL...CJBB..DDDEGG...E", 29], ["HEDD.JHE...JFAAKLCFMMKLCF.GIII..GBBB", 29], [".JJLC.HFFLC.HAAMC.B.GMIIB.GKKE..DD.E", 29], ["..MIIIH.MCC.HAAL.K...LFKBDGGFEBDJJFE", 29], ["JLLLBIJ...BIAADFCK..DFCK...HEEGGGH..", 29], ["ILL.DDICCCB.AAHKB...HKFF.GGG.J.EEE.J", 30], ["..CHFF..CHI.AA.GI..DDGKJBEEEKJB.....", 30], ["EEEIGKBLLIGKBAA.DM.FF.DM..JCHH..JC..", 30], ["FDD.CGFJJJCGAAHEC...HEKK...BII...B..", 30], ["HHHEE.IICC.JAADB.JL.DBGGL..KKK..FF..", 30], ["JJJ.HHCCD...AAD...LIIEEMLGGKFMBBBKF.", 30], [".EEEGK..LLGK.AAIDM.FFIDMB.JCHHB.JC..", 32], ["GJJJHEGCCCHEAA.MFI..DMFI..DKBB...KLL", 32], ["DDDBKC...BKC.AALJFIHHLJFI.M.GGEEM...", 33], ["BBBJJF..IGGFAAI.ECDDDMECH..MKKH.LL..", 36]]
+  ] }
+];
+// 出口在右邊哪一排（從 0 算）
+const EXIT_ROW = { 4: 1, 5: 2, 6: 2 };
+// 每台車：顏色、名字、車上的動物（顏色差很多，再加動物，比較好認）
+const COLORS = [
+  ['#e53935', '紅車', '⭐', '星星'],
+  ['#1565c0', '藍車', '🐶', '小狗'], ['#2e9e44', '綠車', '🐸', '青蛙'], ['#ffd400', '黃車', '🐥', '小雞'], ['#8e24aa', '紫車', '🐱', '小貓'],
+  ['#ff8a00', '橘車', '🦊', '狐狸'], ['#ff69b4', '粉紅車', '🐷', '小豬'], ['#7b4a2a', '咖啡車', '🐻', '熊'], ['#212121', '黑車', '🐼', '熊貓'],
+  ['#fafafa', '白車', '🐰', '兔子'], ['#4fc3f7', '天空藍車', '🐳', '鯨魚'], ['#9e9e9e', '灰車', '🐭', '老鼠'], ['#b5e61d', '螢光綠車', '🐯', '老虎'],
+];
+const carLabel = i => { const c = COLORS[i % COLORS.length]; return `${c[2]}${c[1]}`; };       // 畫面：🐶藍車
+const carSpeech = i => { const c = COLORS[i % COLORS.length]; return `${c[3]}${c[1]}`; };      // 唸出來：小狗藍車
+const lvKey = (t, i) => `${t}-${i}`;
+const lvName = (t, i) => `${TIERS[t].name}・第 ${i + 1} 關`;
+const nextOf = (t, i) => i < TIERS[t].levels.length - 1 ? [t, i + 1] : t < TIERS.length - 1 ? [t + 1, 0] : null;
+
+// 把盤面文字變成車子清單：{ h: 橫的嗎, len, fix: 固定的排/行 } 和每台車現在的位置
+function parse(str, n) {
+  const ids = [...new Set(str.replace(/\./g, ''))].sort();
+  const cars = [], pos = [];
+  ids.forEach(id => {
+    const cells = [...str].map((ch, k) => ch === id ? k : -1).filter(k => k >= 0);
+    const r0 = Math.floor(cells[0] / n), c0 = cells[0] % n;
+    const h = cells.length > 1 && Math.floor(cells[1] / n) === r0;
+    cars.push({ id, h, len: cells.length, fix: h ? r0 : c0 });
+    pos.push(h ? c0 : r0);
+  });
+  return { cars, pos };
+}
+
+// ---------- 規則和解題（提示用）----------
+function occupancy(n, cars, pos, skip = -1) {
+  const g = new Array(n * n).fill(-1);
+  cars.forEach((c, i) => { if (i !== skip) for (let k = 0; k < c.len; k++) g[c.h ? c.fix * n + pos[i] + k : (pos[i] + k) * n + c.fix] = i; });
+  return g;
+}
+// 這台車可以滑到哪裡（最前、最後）
+function rangeOf(n, cars, pos, i) {
+  const g = occupancy(n, cars, pos, i), c = cars[i], at = p => c.h ? c.fix * n + p : p * n + c.fix;
+  let lo = pos[i], hi = pos[i];
+  while (lo - 1 >= 0 && g[at(lo - 1)] === -1) lo--;
+  while (hi + c.len < n && g[at(hi + c.len)] === -1) hi++;
+  return [lo, hi];
+}
+function neighbors(n, cars, pos) {
+  const out = [];
+  cars.forEach((c, i) => {
+    const [lo, hi] = rangeOf(n, cars, pos, i);
+    for (let p = lo; p <= hi; p++) if (p !== pos[i]) { const q = [...pos]; q[i] = p; out.push([q, i, p]); }
+  });
+  return out;
+}
+const isSolved = (n, pos) => pos[0] === n - 2;
+// 從現在的樣子找最少步數的走法，回傳第一步 [第幾台車, 移到哪]
+function firstMove(n, cars, start) {
+  const key = p => p.join(','), prev = new Map([[key(start), null]]), queue = [start];
+  for (let h = 0; h < queue.length; h++) {
+    const p = queue[h];
+    if (isSolved(n, p)) {
+      let k = key(p), step = null;
+      while (prev.get(k)) { step = prev.get(k); k = step.from; }
+      return step ? [step.car, step.to] : null;
+    }
+    for (const [q, i, to] of neighbors(n, cars, p)) {
+      const kq = key(q);
+      if (!prev.has(kq)) { prev.set(kq, { from: key(p), car: i, to }); queue.push(q); }
+    }
+  }
+  return null;
+}
+
+// ---------- 語音 ----------
+let zhVoice = null;
+function pickVoice() { const vs = speechSynthesis.getVoices(); zhVoice = vs.find(v => v.lang === 'zh-TW') || vs.find(v => v.lang.startsWith('zh')) || null; }
+if ('speechSynthesis' in window) { pickVoice(); speechSynthesis.onvoiceschanged = pickVoice; }
+function say(text) {
+  if (!('speechSynthesis' in window)) return;
+  speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = 'zh-TW'; u.rate = 0.9; if (zhVoice) u.voice = zhVoice;
+  speechSynthesis.speak(u);
+}
+
+// ---------- 狀態 ----------
+const $ = id => document.getElementById(id);
+let G = null;   // { t, i, n, cars, pos, start, moves, history, won }
+const done = {
+  get() { try { return JSON.parse(localStorage.getItem('parking-done') || '{}'); } catch (_) { return {}; } },
+  add(k) { const d = this.get(); d[k] = (d[k] || 0) + 1; try { localStorage.setItem('parking-done', JSON.stringify(d)); } catch (_) {} },
+};
+// 這一關現在要玩題庫的第幾題（完成過幾題就往後幾題；全部做完才從頭）
+const poolIdx = (t, i) => (done.get()[lvKey(t, i)] || 0) % TIERS[t].levels[i].length;
+const puzzleOf = (t, i, p = poolIdx(t, i)) => TIERS[t].levels[i][p];
+const store = {
+  save() { try { localStorage.setItem('parking-cur', JSON.stringify({ t: G.t, i: G.i, p: G.p, pos: G.pos, moves: G.moves, history: G.history })); } catch (_) {} },
+  load() { try { return JSON.parse(localStorage.getItem('parking-cur') || 'null'); } catch (_) { return null; } },
+  clear() { try { localStorage.removeItem('parking-cur'); } catch (_) {} },
+};
+function show(id) { document.querySelectorAll('.screen').forEach(s => s.classList.toggle('active', s.id === id)); window.scrollTo(0, 0); }
+const setMsg = t => { $('msg').textContent = t; };
+
+function showMenu() {
+  $('win').classList.remove('show');
+  const b = done.get();
+  const next = TIERS.flatMap((T, t) => T.levels.map((_, i) => lvKey(t, i))).find(k => !b[k]);
+  $('tiers').innerHTML = TIERS.map((T, t) => `<div class="tier"><div class="tn">${T.name}<small>${T.n} × ${T.n}</small></div><div class="lvs">
+    ${T.levels.map((L, i) => { const k = lvKey(t, i); return `<button class="lv-btn${b[k] ? ' done' : ''}${k === next ? ' next' : ''}" data-lv="${k}">第${i + 1}關<small>最少 ${puzzleOf(t, i)[1]} 步</small><span class="got">${b[k] ? `🌟×${b[k]} 新題` : ''}</span></button>`; }).join('')}
+  </div></div>`).join('');
+  const s = store.load(), r = $('resume');
+  r.hidden = !(s && s.p != null && TIERS[s.t] && TIERS[s.t].levels[s.i] && TIERS[s.t].levels[s.i][s.p]);
+  if (!r.hidden) r.querySelector('small').textContent = lvName(s.t, s.i);
+  show('menu');
+}
+
+function start(t, i, saved) {
+  const T = TIERS[t], n = T.n, p = saved ? saved.p : poolIdx(t, i), [board, min] = puzzleOf(t, i, p), { cars, pos } = parse(board, n);
+  G = { t, i, p, min, n, cars, pos: saved ? saved.pos : pos, start: [...pos], moves: saved ? saved.moves : 0, history: saved ? saved.history : [], won: false };
+  $('win').classList.remove('show');
+  $('level').textContent = lvName(t, i);
+  show('game'); build(); update();
+  store.save();
+  if (!saved) {
+    const m = t === 0 && i === 0 ? '用手指按住車子滑動，讓紅車開出去' : '讓紅車開出去！';
+    setMsg(m); say(m);
+  } else setMsg('接著上次的關卡');
+}
+
+// 車頭朝哪裡：紅車朝出口（右）；其他車輪流朝兩個方向，看起來比較像真的停車場
+const faceOf = (c, i) => c.h ? (i === 0 || i % 2 ? 'r' : 'l') : (i % 2 ? 'd' : 'u');
+// 車子的零件。a = 離車頭多遠、b = 離車尾多遠、s = 沿著車身的長度、x = 離車身側邊多遠、w = 寬度（都是 %）
+// 長度用「兩格車」當基準，三格的卡車零件不會被拉長
+const PARTS = [
+  ['glass front', { a: 17, s: 15, x: 14, w: 72 }], ['glass', { b: 11, s: 10, x: 20, w: 60 }],
+  ['head', { a: 1, s: 6, x: 8, w: 20 }], ['head', { a: 1, s: 6, x: 72, w: 20 }],
+  ['tail', { b: 1, s: 5, x: 10, w: 18 }], ['tail', { b: 1, s: 5, x: 72, w: 18 }],
+  ['wheel', { a: 13, s: 17, x: -10, w: 28 }], ['wheel', { a: 13, s: 17, x: 82, w: 28 }],
+  ['wheel', { b: 13, s: 17, x: -10, w: 28 }], ['wheel', { b: 13, s: 17, x: 82, w: 28 }],
+];
+function carParts(c, face) {
+  const k = 2 / c.len;
+  return PARTS.map(([cls, q]) => {
+    const size = q.s * k, fromFront = q.a != null ? q.a * k : 100 - q.b * k - size;
+    const along = { r: 'right', l: 'left', d: 'bottom', u: 'top' }[face];
+    const lenProp = c.h ? 'width' : 'height', side = c.h ? 'top' : 'left', wProp = c.h ? 'height' : 'width';
+    return `<i class="part ${cls}" style="${along}:${fromFront}%;${lenProp}:${size}%;${side}:${q.x}%;${wProp}:${q.w}%"></i>`;
+  }).join('');
+}
+// 車頭圓一點、車尾方一點
+const RADIUS = { r: '10% 26% 26% 10% / 16% 36% 36% 16%', l: '26% 10% 10% 26% / 36% 16% 16% 36%',
+                 d: '16% 16% 36% 36% / 10% 10% 26% 26%', u: '36% 36% 16% 16% / 26% 26% 10% 10%' };
+
+// 畫停車場和車子
+function build() {
+  const { n, cars } = G, board = $('board'), cell = 100 / n;
+  board.style.setProperty('--n', n);
+  board.innerHTML = cars.map((c, i) => `<div class="car anim ${c.h ? 'h' : 'v'}" data-i="${i}" style="--len:${c.len};width:${c.h ? c.len * cell : cell}%;height:${c.h ? cell : c.len * cell}%">
+    <div class="body${COLORS[i % COLORS.length][1] === '白車' ? ' white' : ''}${i === 0 ? ' red' : ''}" style="background:${COLORS[i % COLORS.length][0]};border-radius:${RADIUS[faceOf(c, i)]}"><span class="arrow">${COLORS[i % COLORS.length][2]}</span>${carParts(c, faceOf(c, i))}</div></div>`).join('');
+  // 出口：右邊框留一個缺口
+  const lot = board.parentElement;
+  lot.querySelectorAll('.exit, .exit-label').forEach(e => e.remove());
+  const top = `${EXIT_ROW[n] * cell}%`, h = `${cell}%`;
+  board.insertAdjacentHTML('beforeend', `<div class="exit" style="top:${EXIT_ROW[n] * cell}%;height:${cell}%"></div>`);
+  lot.insertAdjacentHTML('beforeend', `<div class="exit-label" style="top:${top};height:${h}"><b>➡</b>出口</div>`);
+}
+function place(i, p) {
+  const c = G.cars[i], el = document.querySelector(`.car[data-i="${i}"]`), cell = 100 / G.n;
+  el.style.left = (c.h ? p : c.fix) * cell + '%';
+  el.style.top = (c.h ? c.fix : p) * cell + '%';
+}
+function update() {
+  G.cars.forEach((_, i) => place(i, G.pos[i]));
+  $('moves').textContent = `走了 ${G.moves} 步（最少 ${G.min} 步）`;
+}
+
+// 移動一台車（算一步），紅車到出口就過關
+function moveCar(i, p) {
+  if (p === G.pos[i]) return;
+  G.history.push([i, G.pos[i]]);
+  G.pos[i] = p; G.moves++;
+  document.querySelectorAll('.car.hint').forEach(e => e.classList.remove('hint'));
+  update(); store.save();
+  if (isSolved(G.n, G.pos)) return win();
+  setMsg(G.moves === 1 ? '很好，繼續！' : '');
+}
+
+function win() {
+  G.won = true; store.clear();
+  const L = [null, G.min];
+  done.add(lvKey(G.t, G.i));      // 完成了，這一關下次換新題目
+  // 紅車開出去的動畫
+  const el = document.querySelector('.car[data-i="0"]');
+  el.classList.add('leave'); requestAnimationFrame(() => { el.style.left = '110%'; });
+  const perfect = G.moves <= L[1];
+  $('win-stars').textContent = perfect ? '🌟🌟🌟' : '🌟🌟';
+  $('win-text').innerHTML = perfect ? `用 ${G.moves} 步就開出去，<br>是最少的步數，太厲害了！` : `用了 ${G.moves} 步，完成了！<br>這關最少可以 ${L[1]} 步，下次可以挑戰看看`;
+  const nx = nextOf(G.t, G.i);
+  $('next-lv').hidden = !nx;
+  if (nx) $('next-lv').innerHTML = `▶ 下一關<small>${lvName(...nx)}${nx[0] !== G.t ? '（升級了！）' : ''}</small>`;
+  setMsg('🎉 紅車開出去了！');
+  setTimeout(() => { $('win').classList.add('show'); say(perfect ? '太厲害了！最少步數！' : '開出去了！好棒！'); }, 800);
+}
+
+// ---------- 拖動車子 ----------
+let drag = null;
+$('board').addEventListener('pointerdown', e => {
+  const el = e.target.closest('.car');
+  if (!el || !G || G.won) return;
+  const i = +el.dataset.i, [lo, hi] = rangeOf(G.n, G.cars, G.pos, i);
+  const cellPx = $('board').clientWidth / G.n;
+  drag = { i, el, lo, hi, x: e.clientX, y: e.clientY, from: G.pos[i], cellPx, cur: G.pos[i] };
+  el.classList.add('drag'); el.classList.remove('anim');
+  try { el.setPointerCapture(e.pointerId); } catch (_) {}
+});
+$('board').addEventListener('pointermove', e => {
+  if (!drag) return;
+  const c = G.cars[drag.i], d = ((c.h ? e.clientX - drag.x : e.clientY - drag.y)) / drag.cellPx;
+  drag.cur = Math.max(drag.lo, Math.min(drag.hi, drag.from + d));
+  const cell = 100 / G.n;
+  drag.el.style[c.h ? 'left' : 'top'] = drag.cur * cell + '%';
+});
+function endDrag() {
+  if (!drag) return;
+  const { i, el, lo, hi } = drag, p = Math.round(drag.cur);
+  el.classList.remove('drag'); el.classList.add('anim');
+  drag = null;
+  if (p === G.pos[i]) {
+    place(i, p);
+    if (lo === hi) { setMsg(`${carLabel(i)}被擋住了，先移開別的車`); say(`${carSpeech(i)}被擋住了，先移開別的車`); }
+    return;
+  }
+  moveCar(i, p);
+}
+$('board').addEventListener('pointerup', endDrag);
+$('board').addEventListener('pointercancel', endDrag);
+
+// ---------- 按鈕 ----------
+document.addEventListener('click', e => {
+  const t = e.target.closest('button');
+  if (!t) return;
+  if (t.dataset.lv) { const [a, b] = t.dataset.lv.split('-').map(Number); return start(a, b); }
+  if (t.id === 'resume') { const s = store.load(); if (s) start(s.t, s.i, s); return; }
+  const act = t.dataset.act;
+  if (act === 'menu') return showMenu();
+  if (act === 'next') { const nx = nextOf(G.t, G.i); return nx ? start(...nx) : showMenu(); }
+  if (act === 'reset') return G.won ? start(G.t, G.i) : (start(G.t, G.i, { p: G.p, pos: [...G.start], moves: 0, history: [] }), setMsg('重新開始這一題'));
+  if (act === 'undo') {
+    if (G.won || !G.history.length) return setMsg('還沒有移動過');
+    const [i, p] = G.history.pop();
+    G.pos[i] = p; G.moves = Math.max(0, G.moves - 1);
+    update(); store.save(); setMsg('退回一步');
+    return;
+  }
+  if (act === 'hint') {
+    if (G.won) return;
+    const mv = firstMove(G.n, G.cars, G.pos);
+    if (!mv) return;
+    const [i, to] = mv, c = G.cars[i];
+    const dir = c.h ? (to > G.pos[i] ? '往右' : '往左') : (to > G.pos[i] ? '往下' : '往上');
+    const el = document.querySelector(`.car[data-i="${i}"]`);
+    document.querySelectorAll('.car.hint').forEach(e => e.classList.remove('hint'));
+    el.classList.add('hint');
+    const k = Math.abs(to - G.pos[i]);
+    setMsg(`💡 把${carLabel(i)}${dir}移 ${k} 格`); say(`把${carSpeech(i)}${dir}移 ${k} 格`);
+  }
+});
+
+showMenu();
+if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js');
+</script>
+<script src="music.js" data-style="playful"></script>
+</body>
+</html>
